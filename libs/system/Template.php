@@ -21,9 +21,13 @@ class Template extends Smarty
 		$this->left_delimiter = "{{";
 		$this->right_delimiter = "}}";
 	}
+	function __init()
+	{
+	    $this->clear_all_assign();
+	}
 	function set_template_dir($dir)
 	{
-		$this->templates_dir = WEBPATH."/$dir";
+		$this->template_dir = WEBPATH.'/'.$dir;
 	}
 	function set_cache($time=3600)
 	{
@@ -36,6 +40,16 @@ class Template extends Smarty
 		if($pagecache->isCached()) $pagecache->load();
 		else return false;
 		return true;
+	}
+	/**
+	 * 传引用到模板中
+	 * @param $key
+	 * @param $value
+	 * @return unknown_type
+	 */
+	function ref($key,&$value)
+	{
+	    $this->_tpl_vars[$key] = &$value;
 	}
 	function display($template= null,$cache_id= null,$complile_id= null)
 	{

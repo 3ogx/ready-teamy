@@ -12,23 +12,28 @@ class Pager
 	 * config ,public
 	 */
 	public $page_name="page";//page标签，用来控制url页。比如说xxx.php?PB_page=2中的PB_page
-	public $next_page='>';//下一页
-	public $pre_page='<';//上一页
-	public $first_page='First';//首页
-	public $last_page='Last';//尾页
-	public $pre_bar='<<';//上一分页条
-	public $next_bar='>>';//下一分页条
+	public $next_page='下一页';//下一页
+	public $pre_page='上一页';//上一页
+	public $first_page='首页';//首页
+	public $last_page='尾页';//尾页
+	public $pre_bar='上一分页条';//上一分页条
+	public $next_bar='下一分页条';//下一分页条
 	public $format_left='';
 	public $format_right='';
 	public $is_ajax=false;//是否支持AJAX分页模式
 	public $page_tpl = '';
 
+	public $fragment;
+	public $span_open = array('first','last','next','previous');
+	public $pagesize_group = array(10,20,50);
+	public $span_class;
 	/**
 	 * private
 	 *
 	 */
 	public $pagebarnum=10;//控制记录条的个数。
 	public $totalpage=0;//总页数
+	public $pagesize=10;
 	public $total=0;
 	public $ajax_action_name='';//AJAX动作名
 	public $nowindex=1;//当前页
@@ -42,27 +47,35 @@ class Pager
 	 */
 	function __construct($array)
 	{
-		if(is_array($array)){
-			if(!array_key_exists('total',$array))$this->error(__FUNCTION__,'need a param of total');
+		//debug($array);
+		if(is_array($array))
+		{
+			if(!isset($array['total'])) $this->error(__FUNCTION__,'need a param of total');
 			$total=intval($array['total']);
-			$perpage=(array_key_exists('perpage',$array))?intval($array['perpage']):10;
-			$nowindex=(array_key_exists('nowindex',$array))?intval($array['nowindex']):'';
-			$url=(array_key_exists('url',$array))?$array['url']:'';
+			$perpage = isset($array['perpage'])?intval($array['perpage']):10;
+			$nowindex = isset($array['nowindex'])?intval($array['nowindex']):'';
+			$url = isset($array['url'])?$array['url']:'';
 		}
-		else{
+		else
+		{
 			$total=$array;
 			$perpage=10;
 			$nowindex='';
 			$url='';
 		}
-		if((!is_int($total))||($total<0))$this->error(__FUNCTION__,$total.' is not a positive integer!');
-		if((!is_int($perpage))||($perpage<=0))$this->error(__FUNCTION__,$perpage.' is not a positive integer!');
-		if(!empty($array['page_name']))$this->set('page_name',$array['page_name']);//设置pagename
+		if(!empty($array['page_name']))
+		{
+			$this->set('page_name',$array['page_name']);//设置pagename
+		}
+		$this->pagesize=$perpage;
 		$this->_set_nowindex($nowindex);//设置当前页
 		$this->totalpage=ceil($total/$perpage);
 		$this->total = $total;
 		$this->offset=($this->nowindex-1)*$perpage;
-		if(!empty($array['ajax']))$this->open_ajax($array['ajax']);//打开AJAX模式
+	}
+	function set_class($span,$classname)
+	{
+		$this->span_class[$span] = $classname;
 	}
 	/**
 	 * 设定类中指定变量名的值，如果改变量不属于这个类，将throw一个exception
@@ -73,21 +86,10 @@ class Pager
 	function set($var,$value)
 	{
 		if(in_array($var,get_object_vars($this)))
-		$this->$var=$value;
+			$this->$var=$value;
 		else {
 			$this->error(__FUNCTION__,$var." does not belong to PB_Page!");
 		}
-
-	}
-	/**
-	 * 打开倒AJAX模式
-	 *
-	 * @param string $action 默认ajax触发的动作。
-	 */
-	function open_ajax($action)
-	{
-		$this->is_ajax=true;
-		$this->ajax_action_name=$action;
 	}
 	/**
 	 * 获取显示"下一页"的代码
@@ -97,7 +99,7 @@ class Pager
 	 */
 	function next_page()
 	{
-		$style = $this->style;
+		$style = @$this->span_class['next'];
 		if($this->nowindex<$this->totalpage)
 		{
 			return $this->_get_link($this->_get_url($this->nowindex+1),$this->next_page,$style);
@@ -113,7 +115,7 @@ class Pager
 	 */
 	function pre_page()
 	{
-		$style = $this->style;
+		$style = @$this->span_class['previous'];
 		if($this->nowindex>1){
 			return $this->_get_link($this->_get_url($this->nowindex-1),$this->pre_page,$style);
 		}
@@ -127,7 +129,7 @@ class Pager
 	 */
 	function first_page()
 	{
-		$style = $this->style;
+		$style = @$this->span_class['first'];
 		if($this->nowindex==1){
 			return '<span class="'.$style.'">'.$this->first_page.'</span>';
 		}
@@ -141,7 +143,7 @@ class Pager
 	 */
 	function last_page()
 	{
-		$style = $this->style;
+		$style = @$this->span_class['last'];
 		if($this->nowindex==$this->totalpage){
 			return '<span class="'.$style.'">'.$this->last_page.'</span>';
 		}
@@ -162,9 +164,9 @@ class Pager
 		{
 			if($i<=$this->totalpage){
 				if($i!=$this->nowindex)
-				$return.=$this->_get_text($this->_get_link($this->_get_url($i),$i,$style));
+					$return.=$this->_get_text($this->_get_link($this->_get_url($i),$i,$style));
 				else
-				$return.=$this->_get_text('<span class="current">'.$i.'</span>');
+					$return.=$this->_get_text('<span class="current">'.$i.'</span>');
 			}else{
 				break;
 			}
@@ -203,45 +205,49 @@ class Pager
 	{
 		return $this->offset;
 	}
-
+	function set_pagesize()
+	{
+		$str = '<div class="pagesize"><span>每页显示：</span>';
+		foreach($this->pagesize_group as $p){
+			if($p==$this->pagesize) $str.="<span class='ps_cur' onclick='setPagesize($p)'>$p</span>";
+			else $str.="<span class='ps' onclick='setPagesize($p)'>$p</span>";
+		}
+		return $str.'</div>';
+	}
 	/**
 	 * 控制分页显示风格（你可以增加相应的风格）
 	 *
 	 * @param int $mode
 	 * @return string
 	 */
-	function render($mode=2)
+	function render($mode=null)
 	{
 		$pager_html = "<div class='pager'>";
-		switch ($mode)
+		if($mode===null)
 		{
-			case '1':
-				$this->next_page='下一页';
-				$this->pre_page='上一页';
-				$pager_html.=$this->pre_page().$this->nowbar().$this->next_page().'第'.$this->select().'页';
-				break;
-			case '2':
-				$this->next_page='下一页';
-				$this->pre_page='上一页';
-				$this->first_page='首页';
-				$this->last_page='尾页';
-				$pager_html.=$this->first_page().$this->pre_page().'<span>[第'.$this->nowindex.'页]</span> '.$this->nowbar().$this->next_page().$this->last_page();
-				break;
-			case '3':
-				$this->next_page='下一页';
-				$this->pre_page='上一页';
-				$this->first_page='首页';
-				$this->last_page='尾页';
-				$pager_html.=$this->first_page().$this->pre_page().$this->next_page().$this->last_page();
-				break;
-			case '4':
-				$this->next_page='下一页';
-				$this->pre_page='上一页';
-				$pager_html.=$this->pre_page().$this->nowbar().$this->next_page();
-				break;
-			case '5':
-				$pager_html.=$this->pre_bar().$this->pre_page().$this->nowbar().$this->next_page().$this->next_bar();
-				break;
+			if(in_array('first',$this->span_open))
+			{
+				$pager_html.=$this->first_page();
+			}
+			if(in_array('previous',$this->span_open))
+			{
+				$pager_html.=$this->pre_page();
+			}
+			$pager_html.=$this->nowbar();
+			if(in_array('next',$this->span_open))
+			{
+				$pager_html.=$this->next_page();
+			}
+			if(in_array('last',$this->span_open))
+			{
+				$pager_html.=$this->last_page();
+			}
+			if(in_array('pagesize',$this->span_open))
+			{
+				$pager_html.=$this->set_pagesize();
+			}
+			$pager_html.='</div>';
+			return $pager_html;
 		}
 		$pager_html.='</div>';
 		return $pager_html;
@@ -253,18 +259,20 @@ class Pager
 	 */
 	function _set_nowindex($nowindex)
 	{
-		if(empty($nowindex)){
+		if(empty($nowindex))
+		{
 			//系统获取
-
-			if(isset($_GET[$this->page_name])){
+			if(isset($_GET[$this->page_name]))
+			{
 				$this->nowindex=intval($_GET[$this->page_name]);
 			}
-		}else{
+		}
+		else
+		{
 			//手动设置
 			$this->nowindex=intval($nowindex);
 		}
 	}
-
 	/**
 	 * 为指定的页面返回地址值
 	 *
@@ -273,10 +281,9 @@ class Pager
 	 */
 	function _get_url($pageno=1)
 	{
-		if(empty($this->page_tpl)) return Swoole_tools::url_merge('page',$pageno,'mvc');
+		if(empty($this->page_tpl)) return Swoole_tools::url_merge('page',$pageno,'mvc,q');
 		else return sprintf($this->page_tpl,$pageno);
 	}
-
 	/**
 	 * 获取分页显示文字，比如说默认情况下_get_text('<a href="">1</a>')将返回[<a href="">1</a>]
 	 *

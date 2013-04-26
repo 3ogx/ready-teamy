@@ -3,7 +3,8 @@
  * Model类，ORM基础类，提供对某个数据库表的接口
  * @author Administrator
  * @package SwooleSystem
- * @subpackage MVC
+ * @subpackage Model
+ * @link http://www.swoole.com/
  */
 class Model
 {
@@ -14,7 +15,16 @@ class Model
 	public $primary="id";
 	public $foreignkey='catid';
 
+	public $_struct;
+	public $_form;
+	public $_form_secret = true;
+
 	public $table="";
+	/**
+	 * 表切片参数
+	 * @var unknown_type
+	 */
+	public $tablesize = 1000000;
 	public $fields;
 	public $select='*';
 
@@ -28,7 +38,16 @@ class Model
 		$this->dbs = new SelectDB($swoole->db);
 		$this->swoole = $swoole;
 	}
-
+	/**
+	 * 按ID切分表
+	 * @param $id
+	 * @return unknown_type
+	 */
+    function shard_table($id)
+    {
+        $table_id = intval($id/$this->tablesize);
+        $this->table = $this->table.'_'.$table_id;
+    }
 	/**
 	 * 获取主键$primary_key为$object_id的一条记录对象(Record Object)
 	 * 如果参数为空的话，则返回一条空白的Record，可以赋值，产生一条新的记录
@@ -51,7 +70,7 @@ class Model
 		$selectdb->from($this->table);
 		$selectdb->primary = $this->primary;
 		$selectdb->select($this->select);
-		if(!isset($params['order'])) $params['order'] = $this->primary.' desc';
+		if(!isset($params['order'])) $params['order'] = "`{$this->table}`.{$this->primary} desc";
 		$selectdb->put($params);
 		if(isset($params['page']))
 		{
@@ -157,7 +176,8 @@ class Model
 	 */
 	function createTable()
 	{
-		$this->db->query($this->create_sql);
+		if($this->create_sql) return $this->db->query($this->create_sql);
+		else return false;
 	}
 	/**
 	 * 获取表状态
@@ -206,6 +226,54 @@ class Model
 		elseif($get==='sql') return $selectdb->getsql();
 	}
 	/**
+	 * 获取一个键值对应的结构，键为表记录主键的值，值为记录数据或者其中一个字段的值
+	 * @param $gets
+	 * @param $field
+	 * @return unknown_type
+	 */
+	function getMap($gets,$field=null)
+	{
+	    $list = $this->gets($gets);
+	    $new = array();
+	    foreach($list as $li)
+	    {
+	        if(empty($field)) $new[$li[$this->primary]] = $li;
+	        else $new[$li[$this->primary]] = $li[$field];
+	    }
+	    unset($list);
+	    return $new;
+	}
+	/**
+	 * 获取一个2层的树状结构
+	 * @param $gets
+	 * @param $category
+	 * @param $order
+	 * @return unknown_type
+	 */
+	function getTree($gets,$category='fid',$order='id desc')
+	{
+	    $gets['order'] = $category.','.$order;
+	    $list = $this->gets($gets);
+	    foreach($list as $li)
+	    {
+	        if($li[$category]==0) $new[$li[$this->primary]] = $li;
+	        else $new[$li[$category]]['child'][$li[$this->primary]] = $li;
+	    }
+	    unset($list);
+	    return $new;
+	}
+	/**
+	 * 检测是否存在数据，实际可以用count代替，0为false，>0为true
+	 * @param $gets
+	 * @return unknown_type
+	 */
+	function exists($gets)
+	{
+	    $c = $this->count($gets);
+	    if($c>0) return true;
+	    else return false;
+	}
+	/**
 	 * 获取表的字段描述
 	 * @return $fields
 	 */
@@ -213,12 +281,62 @@ class Model
 	{
 		return $this->db->query('describe '.$this->table)->fetchall();
 	}
+    /**
+     * 自动生成表单
+     * @param $set_id
+     * @return unknown_type
+     */
+	function getForm($set_id=0)
+	{
+	    $this->_form_();
+	    //传入ID，修改表单
+	    if($set_id)
+	    {
+	        $data = $this->get((int)$set_id)->get();
+	        foreach($this->_form as $k=>&$f) $f['value'] = $data[$k];
+            if(method_exists($this,"_set_")) $this->_set_();
+
+            if($this->_form_secret) Form::secret(get_class($this).'_set');
+	    }
+	    //增加表单
+	    elseif(method_exists($this,"_add_"))
+	    {
+	        $this->_add_();
+	        if($this->_form_secret) Form::secret(get_class($this).'_add');
+	    }
+        return Form::autoform($this->_form);
+	}
+	/**
+	 *
+	 * @param 出错时设置$error
+	 * @return true or false
+	 */
+    function checkForm($input,$method,&$error)
+    {
+        if($this->_form_secret)
+        {
+            $k = 'form_'.get_class($this).'_'.$method;
+            if(!isset($_SESSION)) session();
+            if($_COOKIE[$k]!=$_SESSION[$k])
+            {
+                $error = '错误的请求';
+                return false;
+            }
+        }
+        $this->_form_();
+        return Form::checkInput($input,$this->_form,$error);
+    }
+	function parseForm()
+	{
+
+	}
 }
 /**
  * Record类，表中的一条记录，通过对象的操作，映射到数据库表
  * 可以使用属性访问，也可以通过关联数组方式访问
- * @author Administrator
+ * @author Tianfeng.Han
  * @package SwooleSystem
+ * @subpackage Model
  */
 class Record implements ArrayAccess
 {
@@ -309,14 +427,16 @@ class Record implements ArrayAccess
 		}
 		elseif($this->change==2)
 		{
-			unset($this->_data[$this->primary]);
+			$update = $this->_data;
+			unset($update[$this->primary]);
 			$this->db->update($this->_current_id,$this->_change,$this->table,$this->primary);
 		}
 		return true;
 	}
 	function update()
 	{
-		unset($this->_data[$this->primary]);
+		$update = $this->_data;
+		unset($update[$this->primary]);
 		$this->db->update($this->_current_id,$this->_change,$this->table,$this->primary);
 	}
 	/**
@@ -351,9 +471,9 @@ class Record implements ArrayAccess
 /**
  * 数据结果集，由Record组成
  * 通过foreach遍历，可以产生单条的Record对象，对每条数据进行操作
- * @author Administrator
+ * @author Tianfeng.Han
  * @package SwooleSystem
- * @subpackage MVC
+ * @subpackage Model
  */
 class RecordSet implements Iterator
 {

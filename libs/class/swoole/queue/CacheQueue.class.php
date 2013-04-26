@@ -1,4 +1,7 @@
 <?php
+/**
+ * 这里没办法保证原子性，请线上服务使用redis，httpsqs或系统的ipcs消息队列
+ */
 class CacheQueue implements IQueue
 {
 	private $swoole;
@@ -26,7 +29,6 @@ class CacheQueue implements IQueue
 		}
 		$this->init();
 	}
-
 	private function init()
 	{
 		$this->cache_prefix = $this->prefix.$this->name.'_';
@@ -37,35 +39,23 @@ class CacheQueue implements IQueue
 		$end_id = $this->cache->get($this->cache_prefix.'end');
         if($end_id!==false) $this->end_id = $end_id;
 	}
-
-	function put($data)
+	function push($data)
 	{
-		$this->cache->set($this->cache_prefix.$this->end_id,$data,self::$cache_lifetime);
-		$this->end_id += 1;
-		$this->cache->set($this->cache_prefix.'end',$this->end_id,self::$cache_lifetime);
+	    $c_id = $this->end_id;
+	    $this->cache->increment($this->cache_prefix.'end');
+		$this->cache->set($this->cache_prefix.$c_id,$data,self::$cache_lifetime);
 		$this->cache->save();
 		return true;
 	}
-
-	function getMutex($key)
+	function pop()
 	{
-        while($mutext = $this->cache)
-	}
-
-	function releaseMutex()
-	{
-
-	}
-
-	function get()
-	{
-		$data = $this->cache->get($this->cache_prefix.$this->start_id);
+		$c_id = $this->start_id;
+	    $data = $this->cache->get($this->cache_prefix.$c_id);
 		if($data===false) return false;
 		else
 		{
-			$this->cache->delete($this->cache_prefix.$this->start_id);
-			$this->start_id += 1;
-			$this->cache->set($this->cache_prefix.'start',$this->start_id,self::$cache_lifetime);
+		    $this->cache->increment($this->cache_prefix.'start');
+			$this->cache->delete($this->cache_prefix.$c_id);
 			$this->cache->save();
             return $data;
 		}

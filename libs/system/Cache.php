@@ -1,4 +1,27 @@
 <?php
+interface ICache
+{
+    /**
+     * 设置缓存
+     * @param $key
+     * @param $value
+     * @param $expire
+     * @return unknown_type
+     */
+    function set($key,$value,$expire=0);
+    /**
+     * 获取缓存值
+     * @param $key
+     * @return unknown_type
+     */
+    function get($key);
+    /**
+     * 删除缓存值
+     * @param $key
+     * @return unknown_type
+     */
+    function delete($key);
+}
 /**
  * 缓存制造类，缓存基类
  * @author Tianfeng.Han
@@ -8,38 +31,33 @@
  */
 class Cache
 {
-    public $uri;
     public $cache;
-    static $memcache_compress = 1;
+    static $backends = array(
+        'apc'=>'ApcCache',
+        'file'=>'FileCache',
+        'memcache'=>'CMemcache',
+        'eac'=>'EAcceleratorCache',
+        'xcache'=>'XCache',
+        'dbcache'=>'DBCache',
+        'wincache'=>'WinCache');
 
     function __construct($cache_url)
     {
-        $this->uri = parse_url($cache_url);
-        if(!isset($this->uri['scheme'])) Error::info('Config.php Error','Cache url error!');
-        $this->cache = $this->get_cache();
+        $config = Swoole_tools::uri($cache_url);
+        $this->cache = self::get_cache($config);
     }
-
     /**
      * 获取缓存对象
      * @param $scheme
      * @return cache object
      */
-    function get_cache()
+    static function get_cache($config)
     {
-        switch($this->uri['scheme'])
-        {
-            case 'memcache':
-                $obj = new Memcache;
-                $obj->connect($this->uri['host'],isset($this->uri['port'])?$this->uri['port']:11211);
-                return $obj;
-            case 'file':
-                $obj = new FileCache(FILECACHE_DIR.'/'.$this->uri['fragment'].'.fc');
-                return $obj;
-            default:
-                return;
-        }
+        if(empty(self::$backends[$config['protocol']])) return Error::info('Cache Error',"cache backend:{$config['protocol']} no support");
+        $backend = self::$backends[$config['protocol']];
+        import('#cache.'.$backend);
+        return new $backend($config);
     }
-
     /**
      * 获取键的值
      * @param $key
@@ -49,7 +67,6 @@ class Cache
     {
     	return $this->cache->get($key);
     }
-
     /**
      * 设置键值
      * @param $key--键名
@@ -59,13 +76,8 @@ class Cache
      */
     function set($key,$value,$expire=600)
     {
-        if($this->uri['scheme']=='memcache')
-            $this->cache->set($key,$value,self::$memcache_compress,$expire);
-        else
-            $this->cache->set($key,$value,$expire);
-        return true;
+        return $this->cache->set($key,$value,$expire);
     }
-
     /**
      * 删除键值
      * @param $key
@@ -73,30 +85,11 @@ class Cache
      */
     function delete($key)
     {
-        $this->cache->delete($key);
+        return $this->cache->delete($key);
     }
-
-    function save()
-    {
-    	if($this->uri['scheme']=='file') $this->cache->save();
-    }
-
-    /*function lock($lock_key)
-    {
-    	$lock = 'l';
-    	while($lock=='l')
-    	{
-    		$lock = $this->get($lock_key);
-    		if($lock==)
-    	}
-    	return false;
-    }*/
-
-   // function
 
     function __call($method,$params)
     {
         return call_user_func_array(array($this->cache,$method),$params);
     }
 }
-?>

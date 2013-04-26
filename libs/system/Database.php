@@ -58,6 +58,53 @@ class Database
 		$this->db_apt = new SelectDB($this);
 	}
 	/**
+	 * 初始化参数
+	 * @return unknown_type
+	 */
+	function __init()
+	{
+	    $this->check_status();
+	    $this->db_apt->init();
+	    $this->read_times = 0;
+	    $this->write_times = 0;
+	}
+	/**
+	 * 检查连接状态，如果连接断开，则重新连接
+	 * @return unknown_type
+	 */
+	function check_status()
+	{
+    	if(!$this->_db->ping())
+        {
+            $this->_db->close();
+            $this->_db->connect();
+        }
+	}
+	/**
+	 * 启动事务处理
+	 * @return unknown_type
+	 */
+	function start()
+	{
+	    $this->_db->query('START TRANSACTION');
+	}
+	/**
+	 * 提交事务处理
+	 * @return unknown_type
+	 */
+	function commit()
+	{
+	    $this->_db->query('COMMIT');
+	}
+	/**
+	 * 事务回滚
+	 * @return unknown_type
+	 */
+	function rollback()
+	{
+	    $this->_db->query('ROLLBACK');
+	}
+	/**
 	 * 执行一条SQL语句
 	 * @param $sql
 	 * @return unknown_type

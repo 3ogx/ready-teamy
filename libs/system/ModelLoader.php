@@ -9,7 +9,7 @@
 class ModelLoader
 {
 	private $swoole = null;
-	private $_models = array();
+	public $_models = array();
 
 	function __construct($swoole)
 	{
@@ -25,10 +25,20 @@ class ModelLoader
 
 	function load($model_name)
 	{
-		$model_file = APPSPATH.'/models/'.$model_name.'.model.php';
-		if(!file_exists($model_file)) Error::info('MVC错误',"不存在的模型, <b>$model_name</b>");
+		$m = explode('/', $model_name, 2);
+		if(count($m) > 1)
+		{
+			$model_file = Swoole::$app_path."/{$m[0]}/models/{$m[1]}.model.php";
+			$model_class = $m[1];
+		}
+		else
+		{
+			$model_file = Swoole::$app_path.'/models/'.$m[0].'.model.php';
+			$model_class = $m[0];
+		}
+		if(!is_file($model_file)) throw new Error("不存在的模型, <b>$model_name</b>");
 		require_once($model_file);
-		$this->_models[$model_name] = new $model_name($this->swoole);
+		$this->_models[$model_name] = new $model_class($this->swoole);
 		return $this->_models[$model_name];
 	}
 }

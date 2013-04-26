@@ -1,10 +1,10 @@
 <?php
 require('config.php');
-// $php->db->debug = true;
-// $php->tpl->debugging = true;
+$php->db->debug = true;
+/* $php->tpl->debugging = true; */
 
 $php->runMVC('mvc_get');
-//$php->runMVC('mvc_rewrite');
+/* $php->runMVC('mvc_rewrite'); */
 
 /**
  * 采用URL GET参数的映射方式

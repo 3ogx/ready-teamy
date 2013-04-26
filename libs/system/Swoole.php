@@ -6,41 +6,94 @@
  * @author Tianfeng.Han
  * @subpackage base
  */
-class Swoole extends ArrayObject
+class Swoole
 {
-    public $db;
-    public $tpl;
-    public $cache;
-    public $event;
-    public $config;
+    //所有全局对象都改为动态延迟加载
+    //如果希望启动加载,请使用Swoole::load()函数
 
-    static $default_cache_life=600;
+    public $server;
+    public $protocol;
+    public $request;
+    public $response;
+    public $session;
+    public $session_open = false;
+
+    static public $config;
+    static public $app_root;
+    static public $app_path;
+    /**
+     * 可使用的组件
+     */
+    static $autoload_libs = array(
+    	'db' => true,  //数据库
+    	'tpl' => true, //模板系统
+    	'cache' => true, //缓存
+    	'event' => true, //异步事件
+    	'log' => true, //日志
+    	'kdb' => true, //key-value数据库
+    	'upload' => true, //上传组件
+    	'user' => true,   //用户验证组件
+    );
+    /**
+     * Swoole类的实例
+     * @var unknown_type
+     */
+    static public $php;
     public $pagecache;
+    /**
+     * 发生错误时的回调函数
+     * @var unknown_type
+     */
+    public $error_callback;
 
     public $load;
     public $model;
     public $plugin;
     public $genv;
     public $env;
-
-    function __construct()
+    
+    private function __construct()
     {
         if(!defined('DEBUG')) define('DEBUG','off');
         if(DEBUG=='off') error_reporting(0);
         else error_reporting(E_ALL);
         $this->__init();
-        parent::__construct();
         $this->load = new SwooleLoader($this);
         $this->model = new ModelLoader($this);
         $this->plugin = new PluginLoader($this);
-        $this->genv = new SwooleEnv($this);
     }
-    function __release()
+    static function getInstance()
+    {
+        if(!self::$php)
+        {
+            self::$php = new Swoole;
+        }
+        return self::$php;
+    }
+    private function __release()
     {
         if($this->db instanceof Database) $this->db->close();
         unset($this->tpl);
         unset($this->cache);
     }
+    /**
+     * 获取资源消耗
+     * @return unknown_type
+     */
+    function runtime()
+    {
+        // 显示运行时间
+        $return['time'] = number_format((microtime(true)-$this->env['runtime']['start']),4).'s';
+
+        $startMem =  array_sum(explode(' ',$this->env['runtime']['mem']));
+        $endMem   =  array_sum(explode(' ',memory_get_usage()));
+        $return['memory'] = number_format(($endMem - $startMem)/1024).'kb';
+        return $return;
+    }
+    /**
+     * 压缩内容
+     * @return unknown_type
+     */
     function gzip()
     {
         //不要在文件中加入UTF-8 BOM头
@@ -61,6 +114,30 @@ class Swoole extends ArrayObject
         $this->env['runtime']['mem'] = memory_get_usage();
         #捕获错误信息
         if(DEBUG=='on') set_error_handler('swoole_error_handler');
+		
+		#初始化App环境
+		//为了兼容老的APPSPATH预定义常量方式
+    	if(defined('APPSPATH'))
+    	{
+    		self::$app_root = str_replace(WEBPATH, '', APPSPATH);
+    	}
+    	//新版全部使用类静态变量 self::$app_root
+    	elseif(empty(self::$app_root))
+    	{
+    		self::$app_root = "/apps";
+    	}
+    	self::$app_path = WEBPATH.self::$app_root;
+    	$this->env['app_root'] = self::$app_root;
+    }
+    /**
+     * 加载一个模块，并返回
+     * @param $lib
+     * @return object $lib
+     */
+    static function load($lib)
+    {
+    	$this->$lib = $this->load->loadLib($lib);
+    	return $this->$lib;
     }
     /**
      * 自动导入模块
@@ -68,17 +145,24 @@ class Swoole extends ArrayObject
      */
     function autoload()
     {
-        $autoload = func_get_args();
-        foreach($autoload as $lib) $this->$lib = $this->load->loadLib($lib);
+        //$this->autoload_libs = array_flip(func_get_args());
+        //历史遗留
     }
     /**
-     * 加载config数据
+     * 加载config对象，不加载则为静态数组
      * @return unknown_type
      */
-    function loadConfig($static = true)
+    function loadConfig()
     {
-        if($static) $this->config = new ArrayObject;
-        else $this->config = new SwooleConfig;
+        self::$config = new SwooleConfig;
+    }
+    function __get($lib_name)
+    {
+    	if(isset(self::$autoload_libs[$lib_name]) and empty($this->$lib_name))
+    	{
+    		$this->$lib_name = $this->load->loadLib($lib_name);
+    	}
+    	return $this->$lib_name;
     }
     /**
      * 运行MVC处理模型
@@ -89,49 +173,69 @@ class Swoole extends ArrayObject
     {
         $url_func = 'url_process_'.$url_processor;
         if(!function_exists($url_func))
-        Error::info('MVC Error!',"Url Process function not found!<p>\nFunction:$url_func");
-        $mvc = call_user_func($url_func);
-        $this->env['mvc'] = $mvc;
-        $controller_path = APPSPATH.'/controllers/'.$mvc['controller'].'.php';
-        if(!file_exists($controller_path))
+        {
+        	return Error::info('MVC Error!',"Url Process function not found!<p>\nFunction:$url_func");
+        }
+        $mvc = $url_func();
+        if(!preg_match('/^[a-z0-9_]+$/i',$mvc['controller']))
+        {
+        	return Error::info('MVC Error!',"controller name incorrect.Regx: /^[a-z0-9_]+$/i");
+        }
+        if(!preg_match('/^[a-z0-9_]+$/i',$mvc['view']))
+        {
+        	return Error::info('MVC Error!',"view name incorrect.Regx: /^[a-z0-9_]+$/i");
+        }
+        if(isset($mvc['app']) and !preg_match('/^[a-z0-9_]+$/i',$mvc['app']))
+        {
+        	return Error::info('MVC Error!',"app name incorrect.Regx: /^[a-z0-9_]+$/i");
+        }
+		$this->env['mvc'] = $mvc;
+		//支持app+controller+view三级映射
+		if(isset($mvc['app']))
+		{
+			 $controller_path = self::$app_path."/{$mvc['app']}/controllers/{$mvc['controller']}.php";
+		}
+        else
+        {
+        	$controller_path = self::$app_path."/controllers/{$mvc['controller']}.php";
+        }
+        if(!is_file($controller_path))
         {
             header("HTTP/1.1 404 Not Found");
             Error::info('MVC Error',"Controller <b>{$mvc['controller']}</b> not exist!");
         }
-        else require($controller_path);
+        else require_once($controller_path);
         if(!class_exists($mvc['controller']))
         {
             Error::info('MVC Error',"Controller Class <b>{$mvc['controller']}</b> not exist!");
         }
         $controller = new $mvc['controller']($this);
-        if(!method_exists($controller,$mvc['view']))
+        if(!is_callable(array($controller,$mvc['view'])))
         {
             header("HTTP/1.1 404 Not Found");
-            Error::info('MVC Error!'.$this->view,"View <b>{$mvc['controller']}->{$mvc['view']}</b> Not Found!");
+            Error::info('MVC Error!'.$mvc['view'],"View <b>{$mvc['controller']}->{$mvc['view']}</b> Not Found!");
         }
-        if(empty($mvc['param'])) $param = array();
+        if(empty($mvc['param'])) $param = null;
         else $param = $mvc['param'];
+
+        $method = $mvc['view'];
+        $return = $controller->$method($param);
 
         if($controller->is_ajax)
         {
             header('Cache-Control: no-cache, must-revalidate');
             header('Last-Modified: '.gmdate('D, d M Y H:i:s').' GMT');
             header('Content-type: application/json');
-            $data = call_user_func(array($controller,$mvc['view']));
-            if(DBCHARSET!='utf8')
-            {
-                import_func('array');
-                $data = array_iconv(DBCHARSET , 'utf-8' , $data);
-            }
-            echo json_encode($data);
+            echo json_encode($return);
         }
-        else echo call_user_func(array($controller,$mvc['view']),$param);
+        else $return;
     }
 
     function runAjax()
     {
-        if(empty($_GET['method'])) return;
-        $method = $_GET['method'];
+        if(!preg_match('/^[a-z0-9_]+$/i',$_GET['method'])) return false;
+        $method = 'ajax_'.$_GET['method'];
+
         if(!function_exists($method))
         {
             echo 'Error: Function not found!';
@@ -141,12 +245,10 @@ class Swoole extends ArrayObject
         header('Last-Modified: '.gmdate('D, d M Y H:i:s').' GMT');
         header('Content-type: application/json');
 
-        $method = $_GET['method'];
         $data = call_user_func($method);
         if(DBCHARSET!='utf8')
         {
-            import_func('array');
-            $data = array_iconv(DBCHARSET , 'utf-8' , $data);
+            $data = Swoole_tools::array_iconv(DBCHARSET , 'utf-8' , $data);
         }
         echo json_encode($data);
     }
@@ -166,6 +268,7 @@ class Swoole extends ArrayObject
             {
                 //echo '没有缓存，正在建立缓存';
                 $view = isset($_GET['view'])?$_GET['view']:'index';
+                if(!preg_match('/^[a-z0-9_]+$/i',$view)) return false;
                 foreach($_GET as $key=>$param)
                 $this->tpl->assign($key,$param);
                 $cache->create($this->tpl->fetch($view.'.html'));
@@ -182,13 +285,18 @@ class Swoole extends ArrayObject
         }
     }
 
-    function runAdmin($admin_do)
+    function runServer($ini_file='')
     {
-        require(LIBPATH."/admin/$admin_do.admin.php");
-        $classname = $admin_do.'Admin';
-        $admin = new $classname($this);
-        $action = isset($_GET['action'])?$_GET['action']:'list';
-        call_user_func('admin_'.$action,$admin);
+        if(empty($ini_file)) $ini_file = WEBPATH.'/swoole.ini';
+        import('#net.protocol.AppServer');
+        $protocol = new AppServer($ini_file);
+        global $argv;
+        $server_conf = $protocol->config['server'];
+        import('#net.driver.'.$server_conf['driver']);
+        $server = new $server_conf['driver']($server_conf['host'],$argv[1],60);
+        $this->server = $server;
+        $this->protocol = $protocol;
+        $server->setProtocol($protocol);
+        $server->run($server_conf['processor_num']);
     }
 }
-?>
