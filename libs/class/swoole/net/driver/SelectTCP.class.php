@@ -76,8 +76,8 @@ class SelectTCP extends SwooleServer implements Swoole_TCP_Server_Driver
                     {
                         if($client_socket_id = parent::accept())
                         {
-                        	$this->fds[$client_socket_id] = $this->client_sock[$client_socket_id];
-                        	$this->protocol->onConnect($client_socket_id);
+                            $this->fds[$client_socket_id] = $this->client_sock[$client_socket_id];
+                            $this->protocol->onConnect($client_socket_id);
                         }
                     }
                     else
@@ -89,7 +89,7 @@ class SelectTCP extends SwooleServer implements Swoole_TCP_Server_Driver
                         }
                         else
                         {
-                        	$this->close($socket_id);
+                            $this->close($socket_id);
                         }
                     }
                 }
@@ -109,7 +109,7 @@ class SelectTCP extends SwooleServer implements Swoole_TCP_Server_Driver
         $this->server_socket_id = (int)$this->server_sock;
         $this->fds[$this->server_socket_id] = $this->server_sock;
         stream_set_blocking($this->server_sock , 0);
-	    if(($num-1)>0) sw_spawn($num-1);
+        if(($num-1)>0) sw_spawn($num-1);
         $this->protocol->onStart();
         $this->server_loop();
     }

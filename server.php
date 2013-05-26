@@ -13,9 +13,9 @@ import_all_controller();
 
 $_SERVER['run_mode'] = 'server';
 /* $_SERVER['server_driver'] = 'SelectTCP'; //BlockTCP,EventTCP,SelectTCP */
-$_SERVER['server_driver'] = 'BlockTCP'; //BlockTCP,EventTCP,SelectTCP
+$_SERVER['server_driver'] = 'EventTCP'; //BlockTCP,EventTCP,SelectTCP
 $_SERVER['server_host'] = '127.0.0.1';
-$_SERVER['server_port'] = 8888;
+$_SERVER['server_port'] = 9002;
 $_SERVER['server_processor_num'] = 4;   //启用的进程数目
 $_SERVER['session_cookie_life'] = 86400; //保存SESSION_ID的cookie存活时间
 $_SERVER['session_life'] = 1800;

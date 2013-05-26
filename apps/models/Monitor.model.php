@@ -23,6 +23,19 @@ class Monitor extends Model {
         $this->db->query($sql);
     }
 
+    function createTableSQL() {
+        $sql = "CREATE TABLE IF NOT EXISTS `pwn_monitor` (
+                `id` int(11) NOT NULL AUTO_INCREMENT,
+                `tel` varchar(11) DEFAULT NULL,
+                `mac` varchar(45) DEFAULT NULL,
+                `data` varchar(255) DEFAULT NULL,
+                `created` datetime DEFAULT NULL,
+                PRIMARY KEY (`id`)
+                ) ENGINE=MyISAM  DEFAULT CHARSET=utf8";
+
+        $this->db->query($sql);
+    }
+
     public static function fieldType($field)
     {
         $field_name = "`{$field['name']}`";

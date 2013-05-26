@@ -21,6 +21,7 @@ class SwooleServer
         $this->port = $port;
         $this->timeout = $timeout;
     }
+
     /**
      * 应用协议
      * @return unknown_type
@@ -30,6 +31,7 @@ class SwooleServer
         $this->protocol = $protocol;
         $this->protocol->server = $this;
     }
+
     function accept()
     {
         $client_socket = stream_socket_accept($this->server_sock);
@@ -38,21 +40,23 @@ class SwooleServer
         $this->client_sock[$client_socket_id] = $client_socket;
         $this->client_num++;
         if($this->client_num > $this->max_connect)
-        {
-            sw_socket_close($client_socket);
-            return false;
-        }
+            {
+                sw_socket_close($client_socket);
+                return false;
+            }
         else
-        {
-            //设置写缓冲区
-            stream_set_write_buffer($client_socket,$this->write_buffer_size);
-            return $client_socket_id;
-        }
+            {
+                //设置写缓冲区
+                stream_set_write_buffer($client_socket,$this->write_buffer_size);
+                return $client_socket_id;
+            }
     }
+
     function onError($errno,$errstr)
     {
         exit("$errstr ($errno)");
     }
+
     /**
      * 创建一个Stream Server Socket
      * @param $uri
@@ -70,6 +74,7 @@ class SwooleServer
         stream_set_blocking($socket,$block);
         return $socket;
     }
+
     function create_socket($uri,$block=false)
     {
         $set = parse_url($uri);
@@ -82,31 +87,36 @@ class SwooleServer
         socket_listen($sock);
         return $socket;
     }
+
     function sendData($sock,$data)
     {
         return sw_fwrite_stream($sock,$data);
     }
+
     function log($log)
     {
         echo $log,NL;
     }
 }
+
 function sw_run($cmd)
 {
     if(PHP_OS=='WINNT') pclose(popen("start /B ".$cmd,"r"));
     else exec($cmd." > /dev/null &");
 }
+
 function sw_gc_array($array)
 {
     $new = array();
     foreach($array as $k=>$v)
-    {
-        $new[$k] = $v;
-        unset($array[$k]);
-    }
+        {
+            $new[$k] = $v;
+            unset($array[$k]);
+        }
     unset($array);
     return $new;
 }
+
 /**
  * 关闭socket
  * @param $socket
@@ -116,31 +126,33 @@ function sw_gc_array($array)
 function sw_socket_close($socket,$event=null)
 {
     if($event)
-    {
-        event_del($event);
-        event_free($event);
-    }
+        {
+            event_del($event);
+            event_free($event);
+        }
     stream_socket_shutdown($socket,STREAM_SHUT_RDWR);
     fclose($socket);
 }
+
 function sw_fread_stream($fp,$length)
 {
     $data = false;
     while($buf = fread($fp,$length))
-    {
-        $data .= $buf;
-        if(strlen($buf)<$length) break;
-    }
+        {
+            $data .= $buf;
+            if(strlen($buf)<$length) break;
+        }
     return $data;
 }
+
 function sw_fwrite_stream($fp, $string)
 {
     $length = strlen($string);
     for($written = 0; $written < $length; $written += $fwrite)
-    {
-        $fwrite = fwrite($fp, substr($string, $written));
-        if($fwrite<=0 or $fwrite===false) return $written;
-    }
+        {
+            $fwrite = fwrite($fp, substr($string, $written));
+            if($fwrite<=0 or $fwrite===false) return $written;
+        }
     return $written;
 }
 
@@ -149,13 +161,14 @@ function sw_spawn($num)
     if(!extension_loaded('pcntl')) return new Error("Require pcntl extension!");
     $pids = array();
     for($i=0;$i<$num;$i++)
-    {
-        $pid = pcntl_fork();
-        if($pid) $pids[] = $pid;
-        else break;
-    }
+        {
+            $pid = pcntl_fork();
+            if($pid) $pids[] = $pid;
+            else break;
+        }
     return $pids;
 }
+
 interface Swoole_TCP_Server_Driver
 {
     function run($num=1);
@@ -164,12 +177,14 @@ interface Swoole_TCP_Server_Driver
     function shutdown();
     function setProtocol($protocol);
 }
+
 interface Swoole_UDP_Server_Driver
 {
     function run($num=1);
     function shutdown();
     function setProtocol($protocol);
 }
+
 interface Swoole_TCP_Server_Protocol
 {
     function onStart();
